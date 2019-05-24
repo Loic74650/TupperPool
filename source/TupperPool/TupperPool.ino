@@ -26,18 +26,25 @@ function Decoder(bytes, port) {
 #include <TinyLoRa.h>
 #include "OneWire.h"
 #include <DallasTemperature.h>
+#include <RunningMedian.h>
+#include <SoftTimer.h>
+#include <Streaming.h>
+#include <yasm.h>
+
+//serial printing stuff
+String _endl = "\n";
 
 // Visit your thethingsnetwork.org device console
 // to create an account, and obtain the session keys below.
 
 // Network Session Key (MSB)
-uint8_t NwkSkey[16] = { xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx };
+uint8_t NwkSkey[16] = { XXXXXXXXXXXXXXXXXXXXXXXXXXX };
 
 // Application Session Key (MSB)
-uint8_t AppSkey[16] = { xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx };
+uint8_t AppSkey[16] = { XXXXXXXXXXXXXXXXXXXXXXXXXXX };
 
 // Device Address (MSB)
-uint8_t DevAddr[4] = { xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx };
+uint8_t DevAddr[4] = { XXXXXXXXXXXXXXXXXXXXXXXXXXX };
 
 /************************** Example Begins Here ***********************************/
 // Data Packet to Send to TTN
@@ -46,6 +53,11 @@ uint8_t DevAddr[4] = { xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx };
 // Bytes 4-5: battery reading
 // Bytes 6-7: temperature reading
 unsigned char loraData[8];
+
+float measuredTemp = 0.0;
+float measuredpH = 0.0;
+float measuredOrp = 0.0;
+float measuredvbat = 0.0;
 
 int16_t batteryInt = 0;
 int16_t pHInt = 0;
@@ -64,11 +76,11 @@ TinyLoRa lora = TinyLoRa(7, 8);
 //Analog input pin to read the Battery level
 #define VBATPIN A3
 
-//Done pin to switch TPL115 off
+//Done pin to switch TPL1150 off (not implemented yet)
 #define donePin 5
 
 //One wire bus for the water temperature measurement
-//Data wire is connected to input digital pin 20 on the Arduino
+//Data wire is connected to input digital pin 6 on the Arduino
 #define ONE_WIRE_BUS 6
 
 // Setup a oneWire instance to communicate with any OneWire devices
@@ -83,6 +95,27 @@ DallasTemperature sensor(&oneWire);
 //MAC Address of DS18b20 water temperature sensor
 DeviceAddress DS18b20 = { 0x28, 0x92, 0x25, 0x41, 0x0A, 0x00, 0x00, 0xEE };
 
+//Signal filtering library. Only used in this case to compute the average
+//over multiple measurements but offers other filtering functions such as median, etc. 
+RunningMedian samples_Temp = RunningMedian(10);
+RunningMedian samples_Ph = RunningMedian(10);
+RunningMedian samples_Orp = RunningMedian(10);
+
+//Callbacks
+//Here we use the SoftTimer library which handles multiple timers (Tasks)
+//It is more elegant and readable than a single loop() functtion, especially
+//when tasks with various frequencies are to be used
+void MeasureCallback(Task* me);
+void PublishDataCallback(Task* me);
+
+Task t1(100, MeasureCallback);                //Take measurements
+Task t2(30000, PublishDataCallback);          //Publish data to MQTT broker every 30 secs
+
+//State Machine
+//Getting a 12 bits temperature reading on a DS18b20 sensor takes >750ms
+//Here we use the sensor in asynchronous mode, request a temp reading and use
+//the nice "YASM" state-machine library to do other things while it is being obtained
+YASM gettemp;
 
 void setup()
 {
@@ -100,15 +133,9 @@ void setup()
   pinMode(11, OUTPUT);
   digitalWrite(11, LOW);
 
-  // Start up the Dallas library
-  sensor.begin();
-       
-  // set the resolution
-  sensor.setResolution(DS18b20, TEMPERATURE_RESOLUTION);
-
-  //Synchronous mode
-  sensor.setWaitForConversion(true);
-
+  //Start measurements state machine
+  gettemp.next(gettemp_start);
+  
   // Initialize LoRa
   // Make sure Region #define is correct in TinyLora.h file
   Serial.print("Starting LoRa...");
@@ -123,34 +150,24 @@ void setup()
     while(true);
   }
   Serial.println("OK");
+
+  //MeasureCallback
+  SoftTimer.add(&t1);
+
+  //PublishDataCallback
+  SoftTimer.add(&t2);
 }
 
-void loop()
+//Loop where various tasks are updated/handled
+void MeasureCallback(Task* me)
 {
-    //Get water temperature
-    sensor.requestTemperatures();
-    float measuredTemp = sensor.getTempC(DS18b20);
-  
-    //Read pH level
-    float measuredpH = analogRead(pHPIN);
-    measuredpH *= 1.0846;    // we divided by 1.666 with the resistors bridge and our ref is 3.3V, so multiply by 1.11 in theory
-    measuredpH *= 5.0;  // Multiply by 5.0V, our reference voltage
-    measuredpH /= 1024; // convert to voltage
-    measuredpH = (0.0178 * measuredpH * 200.0) - 1.889; 
+  //request and get temp, pH and Orp readings
+  gettemp.run();
+}
 
-    //Read Orp level
-    float measuredOrp = analogRead(OrpPIN);
-    measuredOrp *= 1.0846;    // we divided by 1.666 with the resistors bridge and our ref is 3.3V, so multiply by 1.11 in theory
-    measuredOrp *= 5.0;  // Multiply by 5.0V, our reference voltage
-    measuredOrp /= 1024; // convert to voltage
-    measuredOrp = ((2.5 - measuredOrp) / 1.037) * 1000.0;
-    
-    //Read battery level
-    float measuredvbat = analogRead(VBATPIN);
-    measuredvbat *= 2;    // we divided by 2 with the resistors bridge, so multiply back
-    measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
-    measuredvbat /= 1024; // convert to voltage
-    
+//Take readings every secs
+void PublishDataCallback(Task* me)
+{
     // encode float as int
     TempInt = round(measuredTemp * 100);
     batteryInt = round(measuredvbat * 100);
@@ -193,14 +210,82 @@ void loop()
     digitalWrite(LED_BUILTIN, HIGH);
     delay(100);
     digitalWrite(LED_BUILTIN, LOW);
-//    SleepCounter = 0;//reset counter
-    delay(30000);
   
 /*
-    //Go to sleep using a TPL5110 board. Not yet implemented
+    //Go to sleep
     digitalWrite(donePin, HIGH);
     delay(10);
     digitalWrite(donePin, LOW);
     delay(10);
 */
+}
+
+//Update temperature, Ph and Orp values
+void getMeasures(DeviceAddress deviceAddress)
+{
+    //Get water temperature
+    samples_Temp.add(sensor.getTempC(deviceAddress));
+    measuredTemp = samples_Temp.getAverage(10);
+    if (measuredTemp == -127.00) {
+      Serial<<F("Error getting temperature from DS18b20")<<_endl;
+    } else {
+      Serial<<F("DS18b20: ")<<measuredTemp<<F("°C")<<F(" - ");
+    }
+  
+    //Read pH level
+    measuredpH = analogRead(pHPIN)* 1.0846 * 5.0 / 1023.0;// we divided by 1.666 with the resistors bridge and our ref is 3.3V, so multiply by 1.11 in theory
+    measuredpH = (0.0178 * measuredpH * 200.0) - 1.889; 
+    samples_Ph.add(measuredpH);                                                                      // compute average of pH from last 5 measurements
+    measuredpH = samples_Ph.getAverage(10);
+    Serial<<F("Ph: ")<<measuredpH<<F(" - ");
+
+    //Read Orp level
+    measuredOrp = analogRead(OrpPIN)* 1.0846 * 5.0 / 1023.0;// we divided by 1.666 with the resistors bridge and our ref is 3.3V, so multiply by 1.11 in theory
+    measuredOrp = ((2.5 - measuredOrp) / 1.037) * 1000.0;
+    samples_Orp.add(measuredOrp);                                                                    // compute average of ORP from last 5 measurements
+    measuredOrp = samples_Orp.getAverage(10);
+    Serial<<F("Orp: ")<<measuredOrp<<F("mV")<<_endl;
+    
+    //Read battery level
+    measuredvbat = analogRead(VBATPIN);
+    measuredvbat *= 2;    // we divided by 2 with the resistors bridge, so multiply back
+    measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
+    measuredvbat /= 1024; // convert to voltage
+}
+
+////////////////////////gettemp state machine///////////////////////////////////
+//Init DS18B20 one-wire library
+void gettemp_start()
+{
+    // Start up the library
+    sensor.begin();
+       
+    // set the resolution
+    sensor.setResolution(DS18b20, TEMPERATURE_RESOLUTION);
+
+    //don't wait ! Asynchronous mode
+    sensor.setWaitForConversion(false); 
+       
+    gettemp.next(gettemp_request);
+} 
+
+//Request temperature asynchronously
+void gettemp_request()
+{
+  sensor.requestTemperatures();
+  gettemp.next(gettemp_wait);
+}
+
+//Wait asynchronously for requested temperature measurement
+void gettemp_wait()
+{ //we need to wait that time for conversion to finish
+  if (gettemp.elapsed(1000/(1<<(12-TEMPERATURE_RESOLUTION))))
+    gettemp.next(gettemp_read);
+}
+
+//read and print temperature measurement
+void gettemp_read()
+{
+    getMeasures(DS18b20); 
+    gettemp.next(gettemp_request);
 }
