@@ -38,13 +38,13 @@ String _endl = "\n";
 // to create an account, and obtain the session keys below.
 
 // Network Session Key (MSB)
-uint8_t NwkSkey[16] = { XXXXXXXXXXXXXXXXXXXXXXXXXXX };
+uint8_t NwkSkey[16] = { XXXXXXXXXXXXXXXXXXXXXX };
 
 // Application Session Key (MSB)
-uint8_t AppSkey[16] = { XXXXXXXXXXXXXXXXXXXXXXXXXXX };
+uint8_t AppSkey[16] = { XXXXXXXXXXXXXXXXXXXXXX };
 
 // Device Address (MSB)
-uint8_t DevAddr[4] = { XXXXXXXXXXXXXXXXXXXXXXXXXXX };
+uint8_t DevAddr[4] = { XXXXXXXXXXXXXXXXXXXXXX };
 
 /************************** Example Begins Here ***********************************/
 // Data Packet to Send to TTN
@@ -132,9 +132,6 @@ void setup()
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(11, OUTPUT);
   digitalWrite(11, LOW);
-
-  //Start measurements state machine
-  gettemp.next(gettemp_start);
   
   // Initialize LoRa
   // Make sure Region #define is correct in TinyLora.h file
@@ -156,6 +153,9 @@ void setup()
 
   //PublishDataCallback
   SoftTimer.add(&t2);
+
+  //Start measurements state machine
+  gettemp.next(gettemp_start);
 }
 
 //Loop where various tasks are updated/handled
@@ -165,7 +165,7 @@ void MeasureCallback(Task* me)
   gettemp.run();
 }
 
-//Take readings every secs
+//Publish measurements every 30 secs
 void PublishDataCallback(Task* me)
 {
     // encode float as int
@@ -212,7 +212,7 @@ void PublishDataCallback(Task* me)
     digitalWrite(LED_BUILTIN, LOW);
   
 /*
-    //Go to sleep
+    //Go to sleep. Not yet implemented
     digitalWrite(donePin, HIGH);
     delay(10);
     digitalWrite(donePin, LOW);
