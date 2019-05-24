@@ -5,7 +5,7 @@
 	
 <p>This simple system is based on the Adafruit Feather 32u4 RFM95 board.<br />
 It is designed to be battery powered and placed in the pool-skimmer.<br />
-pH, Orp and Water temperature are measured, averaged and periodically published to the TTN servers over LoraWan protocol.<br />
+pH, Orp, Water temperature and battery level are measured, averaged and periodically published to the TTN servers over LoraWan protocol.<br />
 The system current consumption is <10mA. A decent size power-bank (ie. USB and 5V supply) should let the system run for several weeks.<br />
 
 
