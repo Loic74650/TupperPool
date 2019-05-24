@@ -18,6 +18,7 @@ The system current consumption is <10mA. A decent size power-bank (ie. USB and 5
 <h4>Hardware</h4>
 <p>
 <ul>
+<li>A TupperWare which fits into your skimmer!</li>
 <li><a title="https://learn.adafruit.com/adafruit-feather-32u4-radio-with-lora-radio-module/overview" href="https://learn.adafruit.com/adafruit-feather-32u4-radio-with-lora-radio-module/overview">Adafruit Feather 32u4 with LoRa Radio Module</a></li>
 <li><a title="https://www.phidgets.com/docs/1130_User_Guide#Measuring_the_pH" href="https://www.phidgets.com/docs/1130_User_Guide#Measuring_the_pH">Phidgets PH/ORB amplifier modules</a></li>
 </ul>
