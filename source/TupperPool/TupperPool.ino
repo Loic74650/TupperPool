@@ -38,13 +38,13 @@ String _endl = "\n";
 // to create an account, and obtain the session keys below.
 
 // Network Session Key (MSB)
-uint8_t NwkSkey[16] = { XXXXXXXXXXXXXXXXXXXXXX };
+uint8_t NwkSkey[16] = { XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX };
 
 // Application Session Key (MSB)
-uint8_t AppSkey[16] = { XXXXXXXXXXXXXXXXXXXXXX };
+uint8_t AppSkey[16] = { XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX };
 
 // Device Address (MSB)
-uint8_t DevAddr[4] = { XXXXXXXXXXXXXXXXXXXXXX };
+uint8_t DevAddr[4] = { XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX };
 
 /************************** Example Begins Here ***********************************/
 // Data Packet to Send to TTN
@@ -93,7 +93,7 @@ DallasTemperature sensor(&oneWire);
 #define TEMPERATURE_RESOLUTION 12
 
 //MAC Address of DS18b20 water temperature sensor
-DeviceAddress DS18b20 = { 0x28, 0x92, 0x25, 0x41, 0x0A, 0x00, 0x00, 0xEE };
+DeviceAddress DS18b20 = { 0x28, 0xFF, 0xC0, 0x35, 0xA2, 0x17, 0x05, 0xA7 }; <- change to your unique probe address
 
 //Signal filtering library. Only used in this case to compute the average
 //over multiple measurements but offers other filtering functions such as median, etc. 
